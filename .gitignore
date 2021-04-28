@@ -1,0 +1,9 @@
+node_modules/
+package-lock.json
+cache/
+artifacts/
+.openzeppelin/
+deployed_*
+.env
+compiled-contracts/
+.DS_Store

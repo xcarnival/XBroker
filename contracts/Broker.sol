@@ -8,9 +8,14 @@ import "@openzeppelin/contracts-upgradeable/token/ERC721/IERC721ReceiverUpgradea
 import "@openzeppelin/contracts-upgradeable/token/ERC20/SafeERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/math/SafeMathUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/EnumerableSetUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/Initializable.sol";
 
-contract Broker is Initializable, IERC721ReceiverUpgradeable {
+contract Broker is
+    Initializable,
+    IERC721ReceiverUpgradeable,
+    ReentrancyGuardUpgradeable
+{
     using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
     using SafeERC20Upgradeable for IERC20Upgradeable;
     using SafeMathUpgradeable for uint256;
@@ -87,7 +92,12 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
     );
 
     ///@notice pledger 取消挂单
-    event PledgeCanceled(address nftAddress, uint256 tokenId, address pledger);
+    event PledgeCanceled(
+        address nftAddress,
+        uint256 tokenId,
+        address pledger,
+        address[] lenders
+    );
 
     ///@notice pledger 成单
     event PledgerDealed(
@@ -98,7 +108,8 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
         uint256 price,
         uint256 interest,
         uint256 duration,
-        uint256 dealTime
+        uint256 dealTime,
+        address[] unsettledLenders
     );
 
     ///@notice pledger 赎回
@@ -107,7 +118,8 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
         uint256 tokenId,
         address pledger,
         address lender,
-        uint256 cost
+        uint256 cost,
+        uint256 devCommission
     );
 
     ///@notice lender 出价
@@ -135,7 +147,9 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
         address nftAddress,
         uint256 tokenId,
         address vendee,
-        uint256 price
+        uint256 price,
+        address previousVendee,
+        uint256 previousPrice
     );
 
     ///@notice 拍卖完成拍得者提取nft（若无人应拍，最初出借人提取）
@@ -166,6 +180,7 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
         uint256 _autionPledgerCut,
         uint256 _autionDevCut
     ) public initializer {
+        __ReentrancyGuard_init();
         admin = msg.sender;
         usdxc = _usdxc;
         beneficiary = _beneficiary;
@@ -189,7 +204,7 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
         uint256 price,
         uint256 interest,
         uint256 duration
-    ) public {
+    ) external nonReentrant {
         require(
             getNftStatus(nftAddress, tokenId) == OrderStatus.NONEXIST,
             "Invalid NFT status"
@@ -219,7 +234,10 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
     }
 
     ///@notice nft 抵押人取消订单
-    function cancelPledge(address nftAddress, uint256 tokenId) public {
+    function cancelPledge(address nftAddress, uint256 tokenId)
+        external
+        nonReentrant
+    {
         require(
             getNftStatus(nftAddress, tokenId) == OrderStatus.LISTED,
             "Invalid NFT status"
@@ -227,10 +245,14 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
         OrderDetail storage detail = orders[nftAddress][tokenId];
         require(detail.pledger == msg.sender, "Auth failed");
 
+        address[] memory _lenders =
+            new address[](detail.lendersAddress.length());
+
         for (uint256 i = 0; i < detail.lendersAddress.length(); ++i) {
             // give back lenders their token
             address _lender = detail.lendersAddress.at(i);
             uint256 _lenderPrice = detail.lenders[_lender].price;
+            _lenders[i] = _lender;
             IERC20Upgradeable(usdxc).safeTransfer(_lender, _lenderPrice);
             delete detail.lenders[_lender];
         }
@@ -241,15 +263,17 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
             msg.sender,
             tokenId
         );
-        emit PledgeCanceled(nftAddress, tokenId, msg.sender);
+        emit PledgeCanceled(nftAddress, tokenId, msg.sender, _lenders);
     }
 
     ///@notice nft 抵押人选择合适 lender 后达成订单
     function pledgerDeal(
         address nftAddress,
         uint256 tokenId,
-        address lender
-    ) public {
+        address lender,
+        uint256 price,
+        uint256 interest
+    ) external nonReentrant {
         require(
             getNftStatus(nftAddress, tokenId) == OrderStatus.LISTED,
             "Invalid NFT status"
@@ -259,6 +283,13 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
         require(detail.lendersAddress.contains(lender), "Invalid lender");
 
         LenderDetail memory _lenderDetail = detail.lenders[lender];
+        require(
+            price == _lenderDetail.price && interest == _lenderDetail.interest,
+            "Invalid price"
+        );
+        address[] memory _unsettledLenders =
+            new address[](detail.lendersAddress.length());
+        uint256 _unsettledLendersCount = 0;
 
         for (uint256 i = 0; i < detail.lendersAddress.length(); ++i) {
             // transfer token of picked lender to pledger
@@ -268,6 +299,8 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
             if (_lender == lender) {
                 IERC20Upgradeable(usdxc).safeTransfer(msg.sender, _lenderPrice);
             } else {
+                _unsettledLenders[_unsettledLendersCount] = _lender;
+                _unsettledLendersCount++;
                 IERC20Upgradeable(usdxc).safeTransfer(_lender, _lenderPrice);
             }
             delete detail.lenders[_lender];
@@ -288,12 +321,16 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
             detail.price,
             detail.interest,
             detail.duration,
-            detail.dealTime
+            detail.dealTime,
+            _unsettledLenders
         );
     }
 
     ///@notice nft 抵押人赎回
-    function pledgerRepay(address nftAddress, uint256 tokenId) public {
+    function pledgerRepay(address nftAddress, uint256 tokenId)
+        external
+        nonReentrant
+    {
         require(
             getNftStatus(nftAddress, tokenId) == OrderStatus.MORTGAGED,
             "Invalid NFT status"
@@ -302,7 +339,7 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
         require(detail.pledger == msg.sender, "Auth failed");
 
         uint256 _cost = detail.price.add(detail.interest);
-        uint256 _commission =
+        uint256 _devCommission =
             detail.interest.mul(repayInterestCut).div(MAX_REPAY_INTEREST_CUT);
         address _lender = detail.lender;
         delete orders[nftAddress][tokenId];
@@ -315,15 +352,22 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
         IERC20Upgradeable(usdxc).safeTransferFrom(
             msg.sender,
             beneficiary,
-            _commission
+            _devCommission
         );
         IERC20Upgradeable(usdxc).safeTransferFrom(
             msg.sender,
             _lender,
-            _cost.sub(_commission)
+            _cost.sub(_devCommission)
         );
 
-        emit PledgerRepaid(nftAddress, tokenId, msg.sender, _lender, _cost);
+        emit PledgerRepaid(
+            nftAddress,
+            tokenId,
+            msg.sender,
+            _lender,
+            _cost,
+            _devCommission
+        );
     }
 
     ///@notice lender makes offer
@@ -336,13 +380,12 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
         uint256 tokenId,
         uint256 price,
         uint256 interest
-    ) public {
+    ) external nonReentrant {
         require(
             getNftStatus(nftAddress, tokenId) == OrderStatus.LISTED,
             "Invalid NFT status"
         );
         OrderDetail storage detail = orders[nftAddress][tokenId];
-        // todo require price > 0
         require(!detail.lendersAddress.contains(msg.sender), "Already offered");
         require(price > 0, "Invalid price");
 
@@ -368,7 +411,10 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
     }
 
     // lender 撤单
-    function lenderCancelOffer(address nftAddress, uint256 tokenId) public {
+    function lenderCancelOffer(address nftAddress, uint256 tokenId)
+        external
+        nonReentrant
+    {
         require(
             getNftStatus(nftAddress, tokenId) == OrderStatus.LISTED,
             "Invalid NFT status"
@@ -385,13 +431,21 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
     }
 
     // lender 成单
-    function lenderDeal(address nftAddress, uint256 tokenId) public {
+    function lenderDeal(
+        address nftAddress,
+        uint256 tokenId,
+        uint256 price,
+        uint256 interest
+    ) external nonReentrant {
         require(
             getNftStatus(nftAddress, tokenId) == OrderStatus.LISTED,
             "Invalid NFT status"
         );
         OrderDetail storage detail = orders[nftAddress][tokenId];
-        require(detail.lendersAddress.contains(msg.sender), "No offer");
+        require(
+            price == detail.price && interest == detail.interest,
+            "Invalid price"
+        );
 
         for (uint256 i = 0; i < detail.lendersAddress.length(); ++i) {
             // transfer token of picked lender to pledger
@@ -421,7 +475,7 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
         address nftAddress,
         uint256 tokenId,
         uint256 price
-    ) public {
+    ) external nonReentrant {
         require(
             getNftStatus(nftAddress, tokenId) == OrderStatus.CLEARING,
             "Invalid NFT status"
@@ -449,10 +503,19 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
             price
         );
 
-        emit Autioned(nftAddress, tokenId, msg.sender, price);
+        emit Autioned(
+            nftAddress,
+            tokenId,
+            msg.sender,
+            price,
+            previousVendee,
+            previousPrice
+        );
     }
 
-    ///@notice 出借人或拍卖买家提取 nft
+    ///@notice 拍卖阶段结束后分发
+    ///@param nftAddress nft address
+    ///@param tokenId token id
     function claim(address nftAddress, uint256 tokenId) public {
         require(
             getNftStatus(nftAddress, tokenId) == OrderStatus.CLAIMABLE,
@@ -460,8 +523,9 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
         );
         OrderDetail storage detail = orders[nftAddress][tokenId];
         address vendee = detail.vendee.vendee;
+        address lender = detail.lender;
         if (vendee != address(0)) {
-            require(msg.sender == vendee, "Not vendee");
+            // 有拍卖人，将拍卖人的钱分发
             uint256 _price = detail.vendee.price;
             uint256 profit = _price.sub(detail.price).sub(detail.interest);
             uint256 _beneficiaryCommissionOfInterest =
@@ -491,17 +555,21 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
                     _pledgerCommissionOfProfit
                 )
             );
-            emit Claimed(nftAddress, tokenId, _price, msg.sender);
+            IERC721Upgradeable(nftAddress).safeTransferFrom(
+                address(this),
+                vendee,
+                tokenId
+            );
+            emit Claimed(nftAddress, tokenId, _price, vendee);
         } else {
-            require(msg.sender == detail.lender, "Not lender");
-            emit Claimed(nftAddress, tokenId, 0, msg.sender);
+            // 没有拍卖人，直接转nft
+            IERC721Upgradeable(nftAddress).safeTransferFrom(
+                address(this),
+                lender,
+                tokenId
+            );
+            emit Claimed(nftAddress, tokenId, 0, lender);
         }
-
-        IERC721Upgradeable(nftAddress).safeTransferFrom(
-            address(this),
-            msg.sender,
-            tokenId
-        );
     }
 
     ///@notice 获取市场中的 NFT 状态
@@ -535,27 +603,30 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
         return OrderStatus.MORTGAGED;
     }
 
+    // todo 出借人 清算结束
+    // todo 抵押人 清算结束
+
     ///@notice 设置赎回时间窗口
     ///@param _period 新时间窗口
-    function setRedemptionPeriod(uint256 _period) public onlyOwner {
+    function setRedemptionPeriod(uint256 _period) external onlyOwner {
         redemptionPeriod = _period;
     }
 
     ///@notice 设置清算时间窗口
     ///@param _period 新时间窗口
-    function setClearingPeriod(uint256 _period) public onlyOwner {
+    function setClearingPeriod(uint256 _period) external onlyOwner {
         clearingPeriod = _period;
     }
 
     ///@notice 设置平台抽成
     ///@param _cut 新平台抽成
-    function setRepayInterestCut(uint256 _cut) public onlyOwner {
+    function setRepayInterestCut(uint256 _cut) external onlyOwner {
         require(_cut < MAX_REPAY_INTEREST_CUT, "Invalid cut");
         repayInterestCut = _cut;
     }
 
     function setAutionCut(uint256 _pledgerCut, uint256 _devCut)
-        public
+        external
         onlyOwner
     {
         require(
@@ -566,7 +637,7 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
         autionDevCut = _devCut;
     }
 
-    function setBeneficiary(address _beneficiary) public onlyBeneficiary {
+    function setBeneficiary(address _beneficiary) external onlyBeneficiary {
         beneficiary = _beneficiary;
     }
 
@@ -575,5 +646,7 @@ contract Broker is Initializable, IERC721ReceiverUpgradeable {
         address from,
         uint256 tokenId,
         bytes calldata data
-    ) external override returns (bytes4) {}
+    ) external override returns (bytes4) {
+        return this.onERC721Received.selector;
+    }
 }

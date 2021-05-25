@@ -196,7 +196,6 @@ contract Broker is
         autionDevCut = _autionDevCut;
     }
 
-    // todo reentrancy
     ///@notice nft 抵押人挂单
     ///@param nftAddress NFT address
     ///@param tokenId tokenId
@@ -472,7 +471,7 @@ contract Broker is
 
         IERC20Upgradeable(usdxc).safeTransferFrom(
             msg.sender,
-            address(this),
+            detail.pledger,
             detail.price
         );
 
@@ -636,9 +635,6 @@ contract Broker is
         OrderDetail storage detail = orders[nftAddress][tokenId];
         return detail.lendersAddress.length();
     }
-
-    // todo 出借人 清算结束
-    // todo 抵押人 清算结束
 
     ///@notice 设置赎回时间窗口
     ///@param _period 新时间窗口

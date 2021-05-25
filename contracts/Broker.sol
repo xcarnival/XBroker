@@ -140,10 +140,15 @@ contract Broker is
     );
 
     ///@notice lender 成单
-    event LenderDealed(address nftAddress, uint256 tokenId, address lender);
+    event LenderDealed(
+        address nftAddress,
+        uint256 tokenId,
+        address lender,
+        uint256 dealTime
+    );
 
     ///@notice 拍卖
-    event Autioned(
+    event Auctioned(
         address nftAddress,
         uint256 tokenId,
         address vendee,
@@ -254,7 +259,11 @@ contract Broker is
             uint256 _lenderPrice = detail.lenders[_lender].price;
             _lenders[i] = _lender;
             IERC20Upgradeable(usdxc).safeTransfer(_lender, _lenderPrice);
-            delete detail.lenders[_lender];
+            // delete detail.lenders[_lender];
+        }
+        for (uint256 i = 0; i < _lenders.length; ++i) {
+            detail.lendersAddress.remove(_lenders[i]);
+            delete detail.lenders[_lenders[i]];
         }
         delete orders[nftAddress][tokenId];
 
@@ -467,7 +476,7 @@ contract Broker is
             detail.price
         );
 
-        emit LenderDealed(nftAddress, tokenId, msg.sender);
+        emit LenderDealed(nftAddress, tokenId, msg.sender, block.timestamp);
     }
 
     ///@notice 拍卖
@@ -503,7 +512,7 @@ contract Broker is
             price
         );
 
-        emit Autioned(
+        emit Auctioned(
             nftAddress,
             tokenId,
             msg.sender,
@@ -527,19 +536,19 @@ contract Broker is
         if (vendee != address(0)) {
             // 有拍卖人，将拍卖人的钱分发
             uint256 _price = detail.vendee.price;
-            uint256 profit = _price.sub(detail.price).sub(detail.interest);
+            uint256 _profit = _price.sub(detail.price).sub(detail.interest);
             uint256 _beneficiaryCommissionOfInterest =
                 detail.interest.mul(repayInterestCut).div(
                     MAX_REPAY_INTEREST_CUT
                 );
             uint256 _beneficiaryCommissionOfProfit =
-                profit.mul(autionDevCut).div(MAX_REPAY_INTEREST_CUT);
+                _profit.mul(autionDevCut).div(MAX_REPAY_INTEREST_CUT);
             uint256 _beneficiaryCommission =
                 _beneficiaryCommissionOfInterest.add(
                     _beneficiaryCommissionOfProfit
                 );
             uint256 _pledgerCommissionOfProfit =
-                profit.mul(autionPledgerCut).div(MAX_REPAY_INTEREST_CUT);
+                _profit.mul(autionPledgerCut).div(MAX_REPAY_INTEREST_CUT);
 
             IERC20Upgradeable(usdxc).safeTransfer(
                 detail.pledger,
@@ -601,6 +610,31 @@ contract Broker is
             return OrderStatus.CLEARING;
         }
         return OrderStatus.MORTGAGED;
+    }
+
+    function lenderOfferInfo(
+        address nftAddress,
+        uint256 tokenId,
+        address user
+    ) public view returns (uint256, uint256) {
+        OrderDetail storage detail = orders[nftAddress][tokenId];
+        // detail.lendersAddress
+        for (uint256 i = 0; i < detail.lendersAddress.length(); ++i) {
+            if (detail.lendersAddress.at(i) == user) {
+                return (
+                    detail.lenders[user].price,
+                    detail.lenders[user].interest
+                );
+            }
+        }
+    }
+
+    function t1(
+        address nftAddress,
+        uint256 tokenId
+    ) public view returns (uint256) {
+        OrderDetail storage detail = orders[nftAddress][tokenId];
+        return detail.lendersAddress.length();
     }
 
     // todo 出借人 清算结束

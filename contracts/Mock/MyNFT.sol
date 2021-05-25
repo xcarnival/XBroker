@@ -20,4 +20,8 @@ contract MyNFT is ERC721 {
         _safeMint(msg.sender, current);
         _tokenIds.increment();
     }
+
+    function setTokenURI(uint256 tokenId, string memory _tokenURI) public {
+        _setTokenURI(tokenId, _tokenURI);
+    }
 }

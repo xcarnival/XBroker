@@ -405,7 +405,7 @@ contract Broker is
         OrderDetail storage detail = orders[nftAddress][tokenId];
         require(!detail.lendersAddress.contains(msg.sender), "Already offered");
         require(price > 0, "Invalid price");
-        require(maxLendersCnt[nftAddress][tokenId] == 0 || detail.lendersAddress.length() <= maxLendersCnt[nftAddress][tokenId], "exeed max lenders cnt");
+        require(maxLendersCnt[nftAddress][tokenId] == 0 || detail.lendersAddress.length() < maxLendersCnt[nftAddress][tokenId], "exeed max lenders cnt");
 
         detail.lendersAddress.add(msg.sender);
         detail.lenders[msg.sender] = LenderDetail({

@@ -81,6 +81,9 @@ contract Broker is
     ///@dev 订单详情列表
     mapping(address => mapping(uint256 => OrderDetail)) orders;
 
+    ///@notice 为防止恶意攻击，每个NFT的最大lenderAddress数量, 超过最大阈值后，不允许lenderOffer，0的时候表示没有限制
+    mapping(address => mapping(uint256 => uint256)) maxLendersCnt;
+
     ///@notice pledger 挂单
     event Pledged(
         address nftAddress,
@@ -163,6 +166,12 @@ contract Broker is
         uint256 tokenId,
         uint256 price,
         address taker
+    );
+
+    event SetMaxLendersCnt(
+        address nftAddress,
+        uint256 tokenId,
+        uint256 _maxLendersCnt
     );
 
     modifier onlyBeneficiary {
@@ -396,6 +405,7 @@ contract Broker is
         OrderDetail storage detail = orders[nftAddress][tokenId];
         require(!detail.lendersAddress.contains(msg.sender), "Already offered");
         require(price > 0, "Invalid price");
+        require(maxLendersCnt[nftAddress][tokenId] == 0 || detail.lendersAddress.length() <= maxLendersCnt[nftAddress][tokenId], "exeed max lenders cnt");
 
         detail.lendersAddress.add(msg.sender);
         detail.lenders[msg.sender] = LenderDetail({
@@ -669,6 +679,12 @@ contract Broker is
 
     function setBeneficiary(address _beneficiary) external onlyBeneficiary {
         beneficiary = _beneficiary;
+    }
+
+    // 设置最大出价数量
+    function setMaxLendersCnt(address nftAddress, uint256 tokenId, uint256 _maxLendersCnt) external onlyOwner {
+        maxLendersCnt[nftAddress][tokenId] = _maxLendersCnt;
+        emit SetMaxLendersCnt(nftAddress, tokenId, _maxLendersCnt);
     }
 
     function onERC721Received(

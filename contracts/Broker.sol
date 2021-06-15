@@ -82,7 +82,7 @@ contract Broker is
     mapping(address => mapping(uint256 => OrderDetail)) orders;
 
     ///@notice 为防止恶意攻击，每个NFT的最大lenderAddress数量, 超过最大阈值后，不允许lenderOffer，0的时候表示没有限制
-    mapping(address => mapping(uint256 => uint256)) maxLendersCnt;
+    mapping(address => mapping(uint256 => uint256)) public maxLendersCnt;
 
     ///@notice pledger 挂单
     event Pledged(
@@ -681,7 +681,8 @@ contract Broker is
         beneficiary = _beneficiary;
     }
 
-    // 设置最大出价数量
+    ///@notice 设置最大出价数量
+    ///@param _maxLendersCnt 新最大出价数量
     function setMaxLendersCnt(address nftAddress, uint256 tokenId, uint256 _maxLendersCnt) external onlyOwner {
         maxLendersCnt[nftAddress][tokenId] = _maxLendersCnt;
         emit SetMaxLendersCnt(nftAddress, tokenId, _maxLendersCnt);

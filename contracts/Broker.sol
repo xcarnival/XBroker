@@ -504,10 +504,10 @@ contract Broker is
         uint256 previousPrice = detail.vendee.price;
         require(price > previousPrice, "Price too low");
 
+        address previousVendee = detail.vendee.vendee;
+
         detail.vendee.vendee = msg.sender;
         detail.vendee.price = price;
-
-        address previousVendee = detail.vendee.vendee;
 
         if (previousVendee != address(0)) {
             IERC20Upgradeable(usdxc).safeTransfer(

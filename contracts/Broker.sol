@@ -73,16 +73,18 @@ contract Broker is
     uint256 public repayInterestCut;
 
     ///@notice 拍卖利益，抵押人分成
-    uint256 public autionPledgerCut;
+    uint256 public auctionPledgerCut;
 
     ///@notice 拍卖利益，平台分成
-    uint256 public autionDevCut;
+    uint256 public auctionDevCut;
 
     ///@dev 订单详情列表
     mapping(address => mapping(uint256 => OrderDetail)) orders;
 
     ///@notice 为防止恶意攻击，每个NFT的最大lenderAddress数量, 超过最大阈值后，不允许lenderOffer，0的时候表示没有限制
     mapping(address => mapping(uint256 => uint256)) public maxLendersCnt;
+    ///@notice 每个NFT的最大lenderAddress数量的默认值
+    uint256 public defaultMaxLendersCnt;
 
     ///@notice pledger 挂单
     event Pledged(
@@ -174,6 +176,10 @@ contract Broker is
         uint256 _maxLendersCnt
     );
 
+    event SetDefaultMaxLendersCnt(
+        uint256 _defaultMaxLendersCnt
+    );
+
     modifier onlyBeneficiary {
         require(msg.sender == beneficiary, "Beneficiary required");
         _;
@@ -191,8 +197,8 @@ contract Broker is
         uint256 _redemptionPeriod,
         uint256 _clearingPeriod,
         uint256 _repayInterestCut,
-        uint256 _autionPledgerCut,
-        uint256 _autionDevCut
+        uint256 _auctionPledgerCut,
+        uint256 _auctionDevCut
     ) public initializer {
         __ReentrancyGuard_init();
         admin = msg.sender;
@@ -201,8 +207,8 @@ contract Broker is
         redemptionPeriod = _redemptionPeriod;
         clearingPeriod = _clearingPeriod;
         repayInterestCut = _repayInterestCut;
-        autionPledgerCut = _autionPledgerCut;
-        autionDevCut = _autionDevCut;
+        auctionPledgerCut = _auctionPledgerCut;
+        auctionDevCut = _auctionDevCut;
     }
 
     ///@notice nft 抵押人挂单
@@ -308,7 +314,8 @@ contract Broker is
             new address[](detail.lendersAddress.length());
         uint256 _unsettledLendersCount = 0;
 
-        for (uint256 i = 0; i < detail.lendersAddress.length(); ++i) {
+        uint256 n = detail.lendersAddress.length();
+        for (uint256 i = 0; i < n; ++i) {
             // transfer token of picked lender to pledger
             // transfer others' back
             address _lender = detail.lendersAddress.at(i);
@@ -322,6 +329,11 @@ contract Broker is
             }
             delete detail.lenders[_lender];
         }
+
+        for (uint256 i = 0; i < n; ++i) {
+            detail.lendersAddress.remove(detail.lendersAddress.at(0));
+        }
+
         delete detail.lendersAddress;
 
         detail.lender = lender;
@@ -405,7 +417,9 @@ contract Broker is
         OrderDetail storage detail = orders[nftAddress][tokenId];
         require(!detail.lendersAddress.contains(msg.sender), "Already offered");
         require(price > 0, "Invalid price");
-        require(maxLendersCnt[nftAddress][tokenId] == 0 || detail.lendersAddress.length() < maxLendersCnt[nftAddress][tokenId], "exeed max lenders cnt");
+        uint256 n = detail.lendersAddress.length();
+        require(maxLendersCnt[nftAddress][tokenId] == 0 || n < maxLendersCnt[nftAddress][tokenId], "exeed max lenders cnt");
+        require(defaultMaxLendersCnt == 0 || n < defaultMaxLendersCnt, "exceed default max lenders cnt");
 
         detail.lendersAddress.add(msg.sender);
         detail.lenders[msg.sender] = LenderDetail({
@@ -465,7 +479,8 @@ contract Broker is
             "Invalid price"
         );
 
-        for (uint256 i = 0; i < detail.lendersAddress.length(); ++i) {
+        uint256 n = detail.lendersAddress.length();
+        for (uint256 i = 0; i < n; ++i) {
             // transfer token of picked lender to pledger
             // transfer others' back
             address _lender = detail.lendersAddress.at(i);
@@ -473,6 +488,11 @@ contract Broker is
             IERC20Upgradeable(usdxc).safeTransfer(_lender, _lenderPrice);
             delete detail.lenders[_lender];
         }
+
+        for (uint i = 0; i < n; ++i) {
+            detail.lendersAddress.remove(detail.lendersAddress.at(0));
+        }
+
         delete detail.lendersAddress;
 
         detail.lender = msg.sender;
@@ -534,7 +554,7 @@ contract Broker is
     ///@notice 拍卖阶段结束后分发
     ///@param nftAddress nft address
     ///@param tokenId token id
-    function claim(address nftAddress, uint256 tokenId) public {
+    function claim(address nftAddress, uint256 tokenId) external nonReentrant {
         require(
             getNftStatus(nftAddress, tokenId) == OrderStatus.CLAIMABLE,
             "Invalid NFT status"
@@ -551,13 +571,13 @@ contract Broker is
                     MAX_REPAY_INTEREST_CUT
                 );
             uint256 _beneficiaryCommissionOfProfit =
-                _profit.mul(autionDevCut).div(MAX_REPAY_INTEREST_CUT);
+                _profit.mul(auctionDevCut).div(MAX_REPAY_INTEREST_CUT);
             uint256 _beneficiaryCommission =
                 _beneficiaryCommissionOfInterest.add(
                     _beneficiaryCommissionOfProfit
                 );
             uint256 _pledgerCommissionOfProfit =
-                _profit.mul(autionPledgerCut).div(MAX_REPAY_INTEREST_CUT);
+                _profit.mul(auctionPledgerCut).div(MAX_REPAY_INTEREST_CUT);
 
             IERC20Upgradeable(usdxc).safeTransfer(
                 detail.pledger,
@@ -588,6 +608,8 @@ contract Broker is
             );
             emit Claimed(nftAddress, tokenId, 0, lender);
         }
+
+        delete orders[nftAddress][tokenId];
     }
 
     ///@notice 获取市场中的 NFT 状态
@@ -665,7 +687,7 @@ contract Broker is
         repayInterestCut = _cut;
     }
 
-    function setAutionCut(uint256 _pledgerCut, uint256 _devCut)
+    function setAuctionCut(uint256 _pledgerCut, uint256 _devCut)
         external
         onlyOwner
     {
@@ -673,8 +695,8 @@ contract Broker is
             _pledgerCut.add(_devCut) < MAX_REPAY_INTEREST_CUT,
             "Invalid cut"
         );
-        autionPledgerCut = _pledgerCut;
-        autionDevCut = _devCut;
+        auctionPledgerCut = _pledgerCut;
+        auctionDevCut = _devCut;
     }
 
     function setBeneficiary(address _beneficiary) external onlyBeneficiary {
@@ -686,6 +708,13 @@ contract Broker is
     function setMaxLendersCnt(address nftAddress, uint256 tokenId, uint256 _maxLendersCnt) external onlyOwner {
         maxLendersCnt[nftAddress][tokenId] = _maxLendersCnt;
         emit SetMaxLendersCnt(nftAddress, tokenId, _maxLendersCnt);
+    }
+
+    ///@notice 设置默认最大出价数量
+    ///@param _defaultMaxLendersCnt 新最大出价数量
+    function setDefaultMaxLendersCnt(uint256 _defaultMaxLendersCnt) external onlyOwner {
+        defaultMaxLendersCnt = _defaultMaxLendersCnt;
+        emit SetDefaultMaxLendersCnt(_defaultMaxLendersCnt);
     }
 
     function onERC721Received(

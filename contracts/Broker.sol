@@ -713,7 +713,7 @@ contract Broker is
     ///@notice set repay interest cut
     ///@param _cut new repay interest cut
     function setRepayInterestCut(uint256 _cut) external onlyOwner {
-        require(_cut <= MAX_REPAY_INTEREST_PLATFORM_LIMIT, "Invalid repay interest platform cut");
+        require(_cut <= MAX_REPAY_INTEREST_PLATFORM_CUT, "Invalid repay interest platform cut");
         repayInterestCut = _cut;
 
         emit SetRepayInterestCut(_cut);
@@ -752,8 +752,8 @@ contract Broker is
 
 
     function claimBeneficiary() external {
-        require(msg.sender == _pendingBeneficiary, "msg.sender is not _pendingBeneficiary");
-        beneficiary = _pendingBeneficiary;
+        require(msg.sender == pendingBeneficiary, "msg.sender is not pendingBeneficiary");
+        beneficiary = pendingBeneficiary;
         pendingBeneficiary = address(0);
 
         emit ClaimBeneficiary(beneficiary);

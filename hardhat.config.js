@@ -3,13 +3,16 @@ require("@nomiclabs/hardhat-web3");
 require("hardhat-gas-reporter");
 require('@openzeppelin/hardhat-upgrades');
 require("@nomiclabs/hardhat-etherscan");
+require("dotenv/config");
 
 module.exports = {
   solidity: {
     version: "0.7.3",
-    optimizer: {
-      enabled: true,
-      runs: 200
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200
+      }
     }
   },
   gasReporter: {
@@ -20,7 +23,7 @@ module.exports = {
   networks: {
     bsctest: {
       url: `https://data-seed-prebsc-1-s1.binance.org:8545/`,
-      accounts: [``],
+      accounts: [process.env.PRIVATE_KEY],
       gas: 5000000,
       gasPrice: 100000000000
     },

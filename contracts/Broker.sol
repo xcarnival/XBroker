@@ -11,6 +11,8 @@ import "@openzeppelin/contracts-upgradeable/utils/EnumerableSetUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/Initializable.sol";
 
+import "./interface/IPubSubMgr.sol";
+
 contract Broker is
     Initializable,
     IERC721ReceiverUpgradeable,
@@ -92,6 +94,9 @@ contract Broker is
 
     uint256 public MAX_AUCTION_PLEDGER_CUT = 50;
     uint256 public MAX_AUCTION_PLATFORM_CUT = 200;
+
+    // pubSubMgr contract
+    address public pubSubMgr;
 
     ///@notice pledger maker order
     event Pledged(
@@ -359,6 +364,8 @@ contract Broker is
         detail.dealTime = block.timestamp;
         detail.status = OrderStatus.MORTGAGED;
 
+        IPubSubMgr(pubSubMgr).publish(keccak256("deposit"), abi.encode(nftAddress, tokenId, msg.sender, lender, price, detail.duration));
+
         emit PledgerDealed(
             nftAddress,
             tokenId,
@@ -384,7 +391,8 @@ contract Broker is
         OrderDetail storage detail = orders[nftAddress][tokenId];
         require(detail.pledger == msg.sender, "Auth failed");
 
-        uint256 _cost = detail.price.add(detail.interest);
+        uint256 _price = detail.price;
+        uint256 _cost = _price.add(detail.interest);
         uint256 _devCommission =
             detail.interest.mul(repayInterestCut).div(MAX_REPAY_INTEREST_CUT);
         address _lender = detail.lender;
@@ -405,6 +413,8 @@ contract Broker is
             _lender,
             _cost.sub(_devCommission)
         );
+
+        IPubSubMgr(pubSubMgr).publish(keccak256("withdraw"), abi.encode(nftAddress, tokenId, msg.sender, _lender, _price));
 
         emit PledgerRepaid(
             nftAddress,
@@ -522,6 +532,7 @@ contract Broker is
             detail.price
         );
 
+        IPubSubMgr(pubSubMgr).publish(keccak256("deposit"), abi.encode(nftAddress, tokenId, detail.pledger, msg.sender, price, detail.duration));
         emit LenderDealed(nftAddress, tokenId, msg.sender, block.timestamp);
     }
 
@@ -605,7 +616,7 @@ contract Broker is
                 _beneficiaryCommission
             );
             IERC20Upgradeable(usdxc).safeTransfer(
-                detail.lender,
+                lender,
                 _price.sub(_beneficiaryCommission).sub(
                     _pledgerCommissionOfProfit
                 )
@@ -625,6 +636,7 @@ contract Broker is
             );
             emit Claimed(nftAddress, tokenId, 0, lender);
         }
+        IPubSubMgr(pubSubMgr).publish(keccak256("withdraw"), abi.encode(nftAddress, tokenId, detail.pledger, lender, detail.price));
 
         delete orders[nftAddress][tokenId];
     }
@@ -771,6 +783,10 @@ contract Broker is
     function setDefaultMaxLendersCnt(uint256 _defaultMaxLendersCnt) external onlyOwner {
         defaultMaxLendersCnt = _defaultMaxLendersCnt;
         emit SetDefaultMaxLendersCnt(_defaultMaxLendersCnt);
+    }
+
+    function setPubSubMgr(address _pubSubMgr) external onlyOwner {
+        pubSubMgr = _pubSubMgr;
     }
 
     function onERC721Received(

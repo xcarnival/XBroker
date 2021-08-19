@@ -90,10 +90,10 @@ contract Broker is
 
     address public pendingBeneficiary;
 
-    uint256 public MAX_REPAY_INTEREST_PLATFORM_CUT = 200;
+    uint256 public constant MAX_REPAY_INTEREST_PLATFORM_CUT = 200;
 
-    uint256 public MAX_AUCTION_PLEDGER_CUT = 50;
-    uint256 public MAX_AUCTION_PLATFORM_CUT = 200;
+    uint256 public constant MAX_AUCTION_PLEDGER_CUT = 50;
+    uint256 public constant MAX_AUCTION_PLATFORM_CUT = 200;
 
     // pubSubMgr contract
     address public pubSubMgr;

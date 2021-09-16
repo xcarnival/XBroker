@@ -384,6 +384,7 @@ contract Broker is
         );
 
         OrderDetail storage detail = orders[counter];
+        detail.nftAddress = _nftAddress;
         detail.pledger = msg.sender;
         detail.listOffer.price = _price;
         detail.listOffer.interest = _interest;
@@ -818,7 +819,7 @@ contract Broker is
             emit Claimed(orderId, _price, vendee);
         } else {
             // When there is no auctioneer, transfer nft
-            _transferNfts(address(this), vendee, detail.lender, detail.tokenIds, detail.amounts, detail.nftType);
+            _transferNfts(address(this), lender, detail.nftAddress, detail.tokenIds, detail.amounts, detail.nftType);
             emit Claimed(orderId, 0, lender);
         }
 

@@ -122,7 +122,7 @@ contract Broker is
         uint256 orderId,
         address nftAddress,
         uint256 nftType,
-        uint256[] tokenId,
+        uint256[] tokenIds,
         uint256[] amounts,
         address pledger,
         uint256 price,
@@ -284,7 +284,7 @@ contract Broker is
     ) external nonReentrant {
         require(_tokenIds.length > 0, "no tokenId");
         require(_price > 0, "Invalid price");
-        require(_interest > 0, "Invalid iinterest");
+        require(_interest > 0, "Invalid interest");
         require(_duration > 0, "Invalid duration");
 
         uint256[] memory amounts = new uint256[](_tokenIds.length);
@@ -308,7 +308,7 @@ contract Broker is
         uint256 _duration
     ) external nonReentrant {
         require(_price > 0, "Invalid price");
-        require(_interest > 0, "Invalid iinterest");
+        require(_interest > 0, "Invalid interest");
         require(_duration > 0, "Invalid duration");
         require(_amount > 0, "Invalid amount");
         
@@ -406,7 +406,7 @@ contract Broker is
             _amounts,
             msg.sender,
             _price,
-            _price,
+            _interest,
             _duration
         );
 

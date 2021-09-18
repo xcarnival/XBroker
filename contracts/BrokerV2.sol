@@ -863,7 +863,7 @@ contract Broker is
             getNftStatus(orderId) != OrderStatus.NONEXIST,
             "order not exist"
         );
-        require(detail.lendersAddress.contains(user), "No offer");
+        // require(detail.lendersAddress.contains(user), "No offer");
         // detail.lendersAddress
         return (detail.lenders[user].price, detail.lenders[user].interest);
     }

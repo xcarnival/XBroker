@@ -210,6 +210,18 @@ contract Broker is
 
     event SetDefaultMaxLendersCnt(uint256 _defaultMaxLendersCnt);
 
+    event SetPubSubMgr(address _pubSubMgr);
+
+    event Initialize(
+        address _usdxc,
+        address _beneficiary,
+        uint256 _redemptionPeriod,
+        uint256 _clearingPeriod,
+        uint256 _repayInterestCut,
+        uint256 _auctionPledgerCut,
+        uint256 _auctionDevCut
+    );
+
     modifier onlyBeneficiary() {
         require(msg.sender == beneficiary, "Beneficiary required");
         _;
@@ -217,6 +229,11 @@ contract Broker is
 
     modifier onlyOwner() {
         require(msg.sender == admin, "Admin required");
+        _;
+    }
+
+    modifier onlyEOA() {
+        require(msg.sender == tx.origin, "EOA required");
         _;
     }
 
@@ -241,6 +258,8 @@ contract Broker is
         repayInterestCut = _repayInterestCut;
         auctionPledgerCut = _auctionPledgerCut;
         auctionDevCut = _auctionDevCut;
+
+        emit Initialize(_usdxc, _beneficiary, _redemptionPeriod, _clearingPeriod, _repayInterestCut, _auctionPledgerCut, _auctionDevCut);
     }
 
     ///@notice nft pledger make order
@@ -616,7 +635,7 @@ contract Broker is
         uint256 orderId,
         uint256 price,
         uint256 interest
-    ) external nonReentrant {
+    ) external nonReentrant onlyEOA {
         require(
             getNftStatus(orderId) == OrderStatus.LISTED,
             "Invalid NFT status"
@@ -683,7 +702,7 @@ contract Broker is
         uint256 orderId,
         uint256 price,
         uint256 interest
-    ) external nonReentrant {
+    ) external nonReentrant onlyEOA {
         require(
             getNftStatus(orderId) == OrderStatus.LISTED,
             "Invalid NFT status"
@@ -988,7 +1007,10 @@ contract Broker is
     }
 
     function setPubSubMgr(address _pubSubMgr) external onlyOwner {
+        require(_pubSubMgr != address(0), "_pubSubMgr is zero address");
         pubSubMgr = _pubSubMgr;
+
+        emit SetPubSubMgr(_pubSubMgr);
     }
     
     function onERC721Received(

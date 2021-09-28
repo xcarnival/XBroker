@@ -68,6 +68,7 @@ contract Broker is
         uint256 nftType; //721, 1155
         EnumerableSetUpgradeable.AddressSet lendersAddress;
         mapping(address => Offer) lenders;
+        uint256 pledgeBlock; // pledge block number for mitigate attacks from flashloan. Force critical transactions to span at least two blocks.
     }
 
     uint256 public counter;
@@ -229,11 +230,6 @@ contract Broker is
 
     modifier onlyOwner() {
         require(msg.sender == admin, "Admin required");
-        _;
-    }
-
-    modifier onlyEOA() {
-        require(msg.sender == tx.origin, "EOA required");
         _;
     }
 
@@ -415,7 +411,7 @@ contract Broker is
         detail.amounts = _amounts;
 
         detail.status = OrderStatus.LISTED;
-
+        detail.pledgeBlock = block.number;
 
         emit Pledged(
             counter,
@@ -522,11 +518,10 @@ contract Broker is
         require(_price > 0, "invalid price");
         require(_interest > 0, "invalid interest");
 
-
         OrderDetail storage detail = orders[_orderId];
         require(detail.pledger == msg.sender, "Auth failed");
         require(detail.lendersAddress.contains(_lender), "Invalid lender");
-        
+        require(block.number >= detail.pledgeBlock + 2, "less 2 blocks");
 
         Offer memory _lenderDetail = detail.lenders[_lender];
         require(
@@ -635,13 +630,14 @@ contract Broker is
         uint256 orderId,
         uint256 price,
         uint256 interest
-    ) external nonReentrant onlyEOA {
+    ) external nonReentrant {
         require(
             getNftStatus(orderId) == OrderStatus.LISTED,
             "Invalid NFT status"
         );
         OrderDetail storage detail = orders[orderId];
         require(!detail.lendersAddress.contains(msg.sender), "Already offered");
+        require(block.number >= detail.pledgeBlock + 2, "less 2 blocks");
         require(price > 0, "Invalid price");
         uint256 n = detail.lendersAddress.length();
         require(
@@ -702,12 +698,13 @@ contract Broker is
         uint256 orderId,
         uint256 price,
         uint256 interest
-    ) external nonReentrant onlyEOA {
+    ) external nonReentrant {
         require(
             getNftStatus(orderId) == OrderStatus.LISTED,
             "Invalid NFT status"
         );
         OrderDetail storage detail = orders[orderId];
+        require(block.number >= detail.pledgeBlock + 2, "less 2 blocks");
         require(
             price == detail.listOffer.price && interest == detail.listOffer.interest,
             "Invalid price"

@@ -110,10 +110,10 @@ contract Broker is
 
     uint256 public constant MAX_REPAY_INTEREST_CUT = 1000;
 
-    uint256 public constant MAX_REPAY_INTEREST_PLATFORM_CUT = 200;
+    uint256 public constant MAX_REPAY_INTEREST_PLATFORM_CUT = 1000;
 
     uint256 public constant MAX_AUCTION_PLEDGER_CUT = 50;
-    uint256 public constant MAX_AUCTION_PLATFORM_CUT = 200;
+    uint256 public constant MAX_AUCTION_PLATFORM_CUT = 500;
 
     // pubSubMgr contract
     address public pubSubMgr;

@@ -15,7 +15,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/Initializable.sol";
 
 import "./interface/IPubSubMgr.sol";
 
-contract Broker is
+contract BrokerV2 is
     Initializable,
     IERC721ReceiverUpgradeable,
     IERC1155ReceiverUpgradeable,

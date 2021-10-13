@@ -25,8 +25,15 @@ module.exports = {
       url: `https://data-seed-prebsc-1-s1.binance.org:8545/`,
       accounts: [process.env.PRIVATE_KEY],
       gas: 5000000,
-      gasPrice: 100000000000
+      gasPrice: 10000000000
     },
+    bsc: {
+      url: `https://bsc-dataseed.binance.org/`,
+      accounts: [process.env.PRIVATE_KEY],
+      gas: 5000000,
+      gasPrice: 10000000000
+    },
+
   },
   etherscan: {
     // Your API key for Etherscan
@@ -34,6 +41,6 @@ module.exports = {
     // eth
     // apiKey: process.env.FTM_SCAN_API_KEY
     // bsc
-    apiKey: ''
+    apiKey: 'JRKMGE29FN2A1UYBRBY5W51ZPW3T6MZBBF'
   }
 };

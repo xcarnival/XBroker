@@ -7,3 +7,4 @@ deployed_*
 .env
 compiled-contracts/
 .DS_Store
+.idea/
